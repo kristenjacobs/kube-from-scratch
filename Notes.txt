@@ -1,0 +1,158 @@
+References:
+
+- https://tdeheurles.github.io/how-to-run-local-kubernetes/
+- https://github.com/Praqma/LearnKubernetes/blob/master/kamran/Kubernetes-The-Hard-Way-on-BareMetal.md
+- https://github.com/kelseyhightower/standalone-kubelet-tutorial
+
+Vagrant file:
+
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "boxcutter/ubuntu1604-desktop"
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "ubuntu1604"
+    vb.gui = false
+    vb.memory = 2048
+    vb.cpus = 1
+  end
+  config.vm.provision "shell", path: "./bootstrap.sh"
+end
+
+krisjaco@krisjaco-mac:~/Test/vagrant_ubuntu_headless $ cat bootstrap.sh
+#!/bin/bash
+sudo http_proxy=http://emea-proxy.uk.oracle.com:80 apt-get -y install ack-grep
+
+# --------------------------------------------------------------------------- #
+# Provisioning the machine
+# --------------------------------------------------------------------------- #
+
+# Install docker
+sudo http_proxy=http://www-proxy-lon.uk.oracle.com:80 apt-get update
+sudo http_proxy=http://www-proxy-lon.uk.oracle.com:80 apt-get install -y docker.io
+
+# Configures proxies for the docker installation
+sudo mkdir -p /etc/systemd/system/docker.service.d/
+root@vagrant:/home/vagrant# cat /etc/systemd/system/docker.service.d/http-proxy.conf
+[Service]
+Environment="HTTP_PROXY=http://www-proxy-lon.uk.oracle.com:80/"
+root@vagrant:/home/vagrant# cat /etc/systemd/system/docker.service.d/https-proxy.conf
+[Service]
+Environment="HTTPS_PROXY=http://www-proxy-lon.uk.oracle.com:80/"
+
+# Restarts docker 
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+
+# Disable swap
+sudo swapoff -a
+
+# Adds our user to the docker group.
+sudo usermod -aG docker $USER
+
+# Pull down the hyperkube image.
+docker pull gcr.io/google_containers/hyperkube:v1.9.0
+
+# To see what hyperkube provides.. 
+docker run gcr.io/google_containers/hyperkube:v1.9.0 /hyperkube --help
+
+# --------------------------------------------------------------------------- #
+# Aims/Kubernetes Architecture 
+# --------------------------------------------------------------------------- #
+
+# TODO: Describe these from a high level
+
+# --------------------------------------------------------------------------- #
+# Starting/using the kubelet standalone
+# --------------------------------------------------------------------------- #
+
+# Creates the manifests directory
+mkdir -p /tmp/kubernetes/manifests
+
+# To start the kubelet:
+cd /vagrant
+./scripts/kubelet-standalone-start.sh
+
+# This will watch the /tmp/kubernetes/manifests directory for pod definitions to run.
+# It will also watch an endpoint, such that (if configured), will server up pod deinfitions 
+# to the kubelet.
+
+# Start a pod (using the directory apporach)
+sudo cp pod.yaml /tmp/kubernetes/manifests/
+
+# Can now see the pod running in docker
+docker ps
+
+# TODO: Want to also be able to stop the pod by removing it from the directory.
+# However, this doesnt currently work. Why is this? Is this expected?
+# Need the API server running apparently for this to work....
+
+# Start a pod (using the endpoint apporach)
+# TODO: Can we create an example of doing this?
+
+
+
+# --------------------------------------------------------------------------- #
+# ETCD
+# --------------------------------------------------------------------------- #
+
+# Start etcd interactively in a terminal
+docker run \
+    --net=host \
+    -it gcr.io/google_containers/etcd:3.1.11 \
+        /usr/local/bin/etcd
+
+# Can access etcd using it's command line client as follows:
+docker run \
+    --net=host \
+    -it gcr.io/google_containers/etcd:3.1.11 \
+        /usr/local/bin/etcdctl cluster-health
+
+# --------------------------------------------------------------------------- #
+# API server. 
+# --------------------------------------------------------------------------- #
+
+# Here we want to start the API server, and the kubelet such that it conumicates
+# with it. Want to show that we can curl the API server to start pods (i.e. that 
+# the kubelet can use this as a source to watch, as well as directories and the endpoint). 
+
+# TODO: Start the API server.
+
+# TODO: Start the kubelet.
+
+# TODO: Accessing API server using curl (cluster health?).
+
+# --------------------------------------------------------------------------- #
+# Using Kubectl
+# --------------------------------------------------------------------------- #
+
+# TODO: Install kubectl then use this instead of curl to talk to the API server.
+
+# --------------------------------------------------------------------------- #
+# Deploying a pod using the API server (via Kubectl)
+# --------------------------------------------------------------------------- #
+
+# TODO: Send a pod definition to the API server, ensuring that the pod is pre-scheduled
+# to a specific node, then check that this is picked up by the kubelet.
+
+# --------------------------------------------------------------------------- #
+# Scheduler
+# --------------------------------------------------------------------------- #
+
+# TODO: Now send a pod without the pre-scheduling, and see that the pod is 
+# not started and picked up by the kubelet.
+
+# TODO: Start the scheduler.
+
+# TODO: Now send a pod without the pre-scheduling, and see that the pod is 
+# now scheduled and picked up bu the kubelet.
+
+# --------------------------------------------------------------------------- #
+# Further stuff.....
+# --------------------------------------------------------------------------- #
+
+# KubeProxy?
+# KubeDNS?
+# Networking?
+
